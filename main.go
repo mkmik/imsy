@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/restic/chunker"
@@ -22,7 +23,9 @@ const (
 )
 
 var (
-	casDir = flag.String("cas-dir", "cas", "directory to store chunks")
+	casDir  = flag.String("cas-dir", "cas", "directory to store chunks")
+	listen  = flag.String("listen", ":8080", "listen address")
+	casAddr = flag.String("cas-addr", "http://localhost:8080", "url to a cas (e.g. imsy serve) instance")
 )
 
 // prepare takes a binary file and saves a list of chunk hashes, one per line,
@@ -42,18 +45,31 @@ func prepare(w io.Writer, rd io.Reader, cas CAS) error {
 			return err
 		}
 
-		h, err := cas.store(ch.Data)
+		h, err := cas.Store(ch.Data)
 		if err != nil {
 			return err
 		}
 		fmt.Fprintln(&hlistBuf, h)
 	}
 
-	lh, err := cas.store(hlistBuf.Bytes())
+	lh, err := cas.Store(hlistBuf.Bytes())
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(w, lh)
+	return nil
+}
+
+func serve(listen string, cas CAS) error {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		h := r.URL.Path[1:]
+		if err := cas.Copy(w, h); err != nil {
+			if os.IsNotExist(err) {
+				http.Error(w, "not found", http.StatusNotFound)
+			}
+		}
+	})
+	log.Fatal(http.ListenAndServe(listen, nil))
 	return nil
 }
 
@@ -75,6 +91,8 @@ func main() {
 	switch cmd := flag.Arg(0); cmd {
 	case "prepare":
 		err = prepare(out, in, cas)
+	case "serve":
+		err = serve(*listen, cas)
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
 	}

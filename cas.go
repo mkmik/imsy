@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -10,14 +11,15 @@ import (
 
 type CAS interface {
 	// save some data and return a hex encoded sha256
-	store(data []byte) (string, error)
+	Store(data []byte) (string, error)
+	Copy(w io.Writer, h string) error
 }
 
 type dirCAS struct {
 	dir string
 }
 
-func (c *dirCAS) store(data []byte) (string, error) {
+func (c *dirCAS) Store(data []byte) (string, error) {
 	h := sha256.Sum256(data)
 	s := hex.EncodeToString(h[:])
 	p, exists := casFile(c.dir, s)
@@ -27,6 +29,21 @@ func (c *dirCAS) store(data []byte) (string, error) {
 		}
 	}
 	return s, nil
+}
+
+func (c *dirCAS) Copy(w io.Writer, h string) error {
+	p, exists := casFile(c.dir, h)
+	if !exists {
+		return os.ErrNotExist
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(w, f)
+	return err
 }
 
 func casFile(casDir string, key string) (filename string, exists bool) {
