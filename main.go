@@ -70,12 +70,16 @@ func serve(listen string, cas CAS) error {
 				http.Error(w, "not found", http.StatusNotFound)
 			}
 		}
+		log.Printf("fetched %q", h)
 	})
 	log.Fatal(http.ListenAndServe(listen, nil))
 	return nil
 }
 
-func pull(addr string, h string, outfile string, cas CAS) error {
+// pull fetches h from the CAS and interprets it as a list of hashes.
+// It then fetches each object from the CAS keyed by those hashes and appends
+// their content to outfile.
+func pull(h string, outfile string, cas CASReader) error {
 	var buf bytes.Buffer
 	if err := cas.Copy(&buf, h); err != nil {
 		return err
@@ -126,7 +130,7 @@ func main() {
 			flag.Usage()
 			os.Exit(1)
 		}
-		err = pull(*casAddr, flag.Arg(1), *output, cas)
+		err = pull(flag.Arg(1), *output, chainedCASReader{cas, &httpCAS{addr: *casAddr}})
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
 	}
