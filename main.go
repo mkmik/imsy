@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -28,23 +29,33 @@ var (
 	casDir = flag.String("cas-dir", "cas", "directory to store chunks")
 )
 
-func chunkFile(casDir string, h string) (filename string, exists bool) {
-	p := path.Join(casDir, h)
+type CAS interface {
+	// save some data and return a hex encoded sha256
+	store(data []byte) (string, error)
+}
+
+type dirCAS struct {
+	dir string
+}
+
+func (c *dirCAS) store(data []byte) (string, error) {
+	h := sha256.Sum256(data)
+	s := hex.EncodeToString(h[:])
+	p, exists := casFile(c.dir, s)
+	if !exists {
+		if err := ioutil.WriteFile(p, data, 0666); err != nil {
+			return "", err
+		}
+	}
+	return s, nil
+}
+
+func casFile(casDir string, key string) (filename string, exists bool) {
+	p := path.Join(casDir, key)
 	if _, err := os.Stat(p); err == nil {
 		return p, true
 	}
 	return p, false
-}
-
-func saveChunk(casDir string, h []byte, data []byte) error {
-	n := fmt.Sprintf("%x", h)
-	p, exists := chunkFile(casDir, n)
-	if exists {
-		return nil
-	}
-
-	ioutil.WriteFile(p, data, 0666)
-	return nil
 }
 
 // prepare takes a binary file and saves a list of chunk hashes, one per line,
@@ -52,9 +63,9 @@ func saveChunk(casDir string, h []byte, data []byte) error {
 // The resulting hash list is then also stored in the CAS and its key (its hash)
 // is printed.
 func prepare(w io.Writer, rd io.Reader, casDir string) error {
+	cas := &dirCAS{dir: casDir}
+
 	var hlistBuf bytes.Buffer
-	hlistHasher := sha256.New()
-	hlistW := io.MultiWriter(&hlistBuf, hlistHasher)
 
 	cer := chunker.NewWithBoundaries(rd, pol, minChunk, maxChunk)
 	for {
@@ -65,20 +76,19 @@ func prepare(w io.Writer, rd io.Reader, casDir string) error {
 		if err != nil {
 			return err
 		}
-		h := sha256.Sum256(ch.Data)
-		fmt.Fprintf(hlistW, "%x\n", h)
 
-		if err := saveChunk(casDir, h[:], ch.Data); err != nil {
+		h, err := cas.store(ch.Data)
+		if err != nil {
 			return err
 		}
+		fmt.Fprintln(&hlistBuf, h)
 	}
 
-	// save list of hashes in CAS too
-	hlistHash := hlistHasher.Sum(nil)
-	if err := saveChunk(casDir, hlistHash, hlistBuf.Bytes()); err != nil {
+	lh, err := cas.store(hlistBuf.Bytes())
+	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%x\n", hlistHash)
+	fmt.Fprintln(w, lh)
 	return nil
 }
 
