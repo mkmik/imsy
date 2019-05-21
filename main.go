@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"flag"
@@ -83,23 +82,6 @@ func prepare(w io.Writer, rd io.Reader, casDir string) error {
 	return nil
 }
 
-// request takes a list of chunk hashes, one per line, and spits out
-// a list of chunks that are not available in the local store.
-func request(w io.Writer, rd io.Reader, casDir string) error {
-	scanner := bufio.NewScanner(rd)
-	for scanner.Scan() {
-		h := scanner.Text()
-		_, exists := chunkFile(casDir, h)
-		if !exists {
-			fmt.Fprintln(w, h)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	return nil
-}
-
 func main() {
 	flag.Parse()
 	os.MkdirAll(*casDir, 0777)
@@ -116,8 +98,6 @@ func main() {
 	switch cmd := flag.Arg(0); cmd {
 	case "prepare":
 		err = prepare(out, in, *casDir)
-	case "request":
-		err = request(out, in, *casDir)
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
 	}
