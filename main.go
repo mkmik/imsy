@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -26,6 +27,7 @@ var (
 	casDir  = flag.String("cas-dir", "cas", "directory to store chunks")
 	listen  = flag.String("listen", ":8080", "listen address")
 	casAddr = flag.String("cas-addr", "http://localhost:8080", "url to a cas (e.g. imsy serve) instance")
+	output  = flag.String("o", "", "output file")
 )
 
 // prepare takes a binary file and saves a list of chunk hashes, one per line,
@@ -73,9 +75,34 @@ func serve(listen string, cas CAS) error {
 	return nil
 }
 
+func pull(addr string, h string, outfile string, cas CAS) error {
+	var buf bytes.Buffer
+	if err := cas.Copy(&buf, h); err != nil {
+		return err
+	}
+
+	f, err := os.Create(outfile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(&buf)
+	for scanner.Scan() {
+		h := scanner.Text()
+		if err := cas.Copy(f, h); err != nil {
+			return err
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func main() {
 	flag.Parse()
-	os.MkdirAll(*casDir, 0777)
 
 	if flag.NArg() < 1 {
 		flag.Usage()
@@ -85,6 +112,7 @@ func main() {
 	out := os.Stdout
 	in := os.Stdin
 
+	os.MkdirAll(*casDir, 0777)
 	cas := &dirCAS{dir: *casDir}
 
 	var err error
@@ -93,6 +121,12 @@ func main() {
 		err = prepare(out, in, cas)
 	case "serve":
 		err = serve(*listen, cas)
+	case "pull":
+		if flag.NArg() < 2 || *output == "" {
+			flag.Usage()
+			os.Exit(1)
+		}
+		err = pull(*casAddr, flag.Arg(1), *output, cas)
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
 	}
