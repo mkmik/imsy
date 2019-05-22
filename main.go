@@ -24,10 +24,10 @@ const (
 )
 
 var (
-	casDir  = flag.String("cas-dir", "cas", "directory to store chunks")
-	listen  = flag.String("listen", ":8080", "listen address")
-	casAddr = flag.String("cas-addr", "http://localhost:8080", "url to a cas (e.g. imsy serve) instance")
-	output  = flag.String("o", "", "output file")
+	casDir  = flag.String("dir", "", "directory to store CAS data (required)")
+	listen  = flag.String("listen", ":8080", `listen address (for "serve")`)
+	casAddr = flag.String("addr", "http://localhost:8080", `url to a cas (e.g. imsy serve) instance`)
+	output  = flag.String("o", "", `output file (required for "pull")`)
 )
 
 // prepare takes a binary file and saves a list of chunk hashes, one per line,
@@ -109,7 +109,7 @@ func pull(h string, outfile string, cas CASReader) error {
 func main() {
 	flag.Parse()
 
-	if flag.NArg() < 1 {
+	if flag.NArg() < 1 || *casDir == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -134,7 +134,7 @@ func main() {
 		err = pull(flag.Arg(1), *output, cachingCASReader{
 			r: chainedCASReader{cas, &httpCAS{addr: *casAddr}},
 			w: cas,
-			})
+		})
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
 	}
