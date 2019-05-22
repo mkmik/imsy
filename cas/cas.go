@@ -1,4 +1,4 @@
-package main
+package cas
 
 import (
 	"bytes"
@@ -12,27 +12,27 @@ import (
 	"path"
 )
 
-type CASWriter interface {
+type Writer interface {
 	// save some data and return a hex encoded sha256
 	Store(data []byte) (string, error)
 }
-type CASReader interface {
+type Reader interface {
 	Copy(w io.Writer, h string) error
 }
 
-type CAS interface {
-	CASReader
-	CASWriter
+type ReadWriter interface {
+	Reader
+	Writer
 }
 
-type dirCAS struct {
-	dir string
+type Dir struct {
+	Dir string
 }
 
-func (c *dirCAS) Store(data []byte) (string, error) {
+func (c *Dir) Store(data []byte) (string, error) {
 	h := sha256.Sum256(data)
 	s := hex.EncodeToString(h[:])
-	p, exists := casFile(c.dir, s)
+	p, exists := casFile(c.Dir, s)
 	if !exists {
 		if err := ioutil.WriteFile(p, data, 0666); err != nil {
 			return "", err
@@ -41,8 +41,8 @@ func (c *dirCAS) Store(data []byte) (string, error) {
 	return s, nil
 }
 
-func (c *dirCAS) Copy(w io.Writer, h string) error {
-	p, exists := casFile(c.dir, h)
+func (c *Dir) Copy(w io.Writer, h string) error {
+	p, exists := casFile(c.Dir, h)
 	if !exists {
 		return os.ErrNotExist
 	}
@@ -64,10 +64,10 @@ func casFile(casDir string, key string) (filename string, exists bool) {
 	return p, false
 }
 
-type httpCAS struct{ addr string }
+type HTTPReader struct{ Addr string }
 
-func (c *httpCAS) Copy(w io.Writer, h string) error {
-	resp, err := http.Get(fmt.Sprintf("%s/%s", c.addr, h))
+func (c *HTTPReader) Copy(w io.Writer, h string) error {
+	resp, err := http.Get(fmt.Sprintf("%s/%s", c.Addr, h))
 	if err != nil {
 		return err
 	}
@@ -83,10 +83,10 @@ func (c *httpCAS) Copy(w io.Writer, h string) error {
 	return err
 }
 
-// a chainedCASReader reads from CAS readers until one doesn't return error
-type chainedCASReader []CASReader
+// a ChainedReader reads from CAS readers until one doesn't return error
+type ChainedReader []Reader
 
-func (c chainedCASReader) Copy(w io.Writer, h string) error {
+func (c ChainedReader) Copy(w io.Writer, h string) error {
 	var err error
 	for _, r := range c {
 		if err = r.Copy(w, h); err == nil {
@@ -96,18 +96,18 @@ func (c chainedCASReader) Copy(w io.Writer, h string) error {
 	return err
 }
 
-// a caching CASReader is a CAS that stores what it successfully reads.
-type cachingCASReader struct {
-	r CASReader
-	w CASWriter
+// a caching Reader is a CAS that stores what it successfully reads.
+type CachingReader struct {
+	R Reader
+	W Writer
 }
 
-func (c cachingCASReader) Copy(w io.Writer, h string) error {
+func (c CachingReader) Copy(w io.Writer, h string) error {
 	var buf bytes.Buffer
-	if err := c.r.Copy(&buf, h); err != nil {
+	if err := c.R.Copy(&buf, h); err != nil {
 		return err
 	}
-	if _, err := c.w.Store(buf.Bytes()); err != nil {
+	if _, err := c.W.Store(buf.Bytes()); err != nil {
 		return err
 	}
 	_, err := io.Copy(w, &buf)

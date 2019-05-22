@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/mkmik/imsy/cas"
 	"github.com/restic/chunker"
 )
 
@@ -34,7 +35,7 @@ var (
 // while saving chunks in CAS.
 // The resulting hash list is then also stored in the CAS and its key (its hash)
 // is printed.
-func prepare(w io.Writer, rd io.Reader, cas CAS) error {
+func prepare(w io.Writer, rd io.Reader, cas cas.ReadWriter) error {
 	var hlistBuf bytes.Buffer
 
 	cer := chunker.NewWithBoundaries(rd, pol, minChunk, maxChunk)
@@ -63,7 +64,7 @@ func prepare(w io.Writer, rd io.Reader, cas CAS) error {
 }
 
 // serve implements a very simple HTTP read-only interface to a CAS.
-func serve(listen string, cas CASReader) error {
+func serve(listen string, cas cas.Reader) error {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		h := r.URL.Path[1:]
 		if err := cas.Copy(w, h); err != nil {
@@ -80,7 +81,7 @@ func serve(listen string, cas CASReader) error {
 // pull fetches h from the CAS and interprets it as a list of hashes.
 // It then fetches each object from the CAS keyed by those hashes and appends
 // their content to outfile.
-func pull(h string, outfile string, cas CASReader) error {
+func pull(h string, outfile string, cas cas.Reader) error {
 	var buf bytes.Buffer
 	if err := cas.Copy(&buf, h); err != nil {
 		return err
@@ -118,22 +119,22 @@ func main() {
 	in := os.Stdin
 
 	os.MkdirAll(*casDir, 0777)
-	cas := &dirCAS{dir: *casDir}
+	cs := &cas.Dir{Dir: *casDir}
 
 	var err error
 	switch cmd := flag.Arg(0); cmd {
 	case "prepare":
-		err = prepare(out, in, cas)
+		err = prepare(out, in, cs)
 	case "serve":
-		err = serve(*listen, cas)
+		err = serve(*listen, cs)
 	case "pull":
 		if flag.NArg() < 2 || *output == "" {
 			flag.Usage()
 			os.Exit(1)
 		}
-		err = pull(flag.Arg(1), *output, cachingCASReader{
-			r: chainedCASReader{cas, &httpCAS{addr: *casAddr}},
-			w: cas,
+		err = pull(flag.Arg(1), *output, cas.CachingReader{
+			R: cas.ChainedReader{cs, &cas.HTTPReader{Addr: *casAddr}},
+			W: cs,
 		})
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
