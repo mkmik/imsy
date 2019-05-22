@@ -82,17 +82,15 @@ func (c *httpCAS) Copy(w io.Writer, h string) error {
 	return err
 }
 
+// a chainedCASReader reads from CAS readers until one doesn't return error
 type chainedCASReader []CASReader
 
 func (c chainedCASReader) Copy(w io.Writer, h string) error {
 	var err error
 	for _, r := range c {
-		if err = r.Copy(w, h); os.IsNotExist(err) {
-			continue
-		} else if err != nil {
-			return err
+		if err = r.Copy(w, h); err == nil {
+			break
 		}
-		break
 	}
 	return err
 }
