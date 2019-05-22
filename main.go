@@ -131,7 +131,10 @@ func main() {
 			flag.Usage()
 			os.Exit(1)
 		}
-		err = pull(flag.Arg(1), *output, chainedCASReader{cas, &httpCAS{addr: *casAddr}})
+		err = pull(flag.Arg(1), *output, cachingCASReader{
+			r: chainedCASReader{cas, &httpCAS{addr: *casAddr}},
+			w: cas,
+			})
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
 	}

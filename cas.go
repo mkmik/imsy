@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -92,5 +93,23 @@ func (c chainedCASReader) Copy(w io.Writer, h string) error {
 			break
 		}
 	}
+	return err
+}
+
+// a caching CASReader is a CAS that stores what it successfully reads.
+type cachingCASReader struct {
+	r CASReader
+	w CASWriter
+}
+
+func (c cachingCASReader) Copy(w io.Writer, h string) error {
+	var buf bytes.Buffer
+	if err := c.r.Copy(&buf, h); err != nil {
+		return err
+	}
+	if _, err := c.w.Store(buf.Bytes()); err != nil {
+		return err
+	}
+	_, err := io.Copy(w, &buf)
 	return err
 }
