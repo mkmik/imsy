@@ -1,6 +1,6 @@
-= imsy
+# imsy
 
-== overview
+## overview
 
 `imsy` shows the underlying principle of file replication
 mechanism suitable for large immutable files, such as VM images.
@@ -10,7 +10,7 @@ and save chunks in a Content Addressed Store (CAS), where each chunk is identifi
 
 The file can now be fully recovered by knowing the list of hashes of its constituent chunks, in order.
 
-== usage
+## usage
 
 First check out and run `go build`.
 
