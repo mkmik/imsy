@@ -62,7 +62,8 @@ func prepare(w io.Writer, rd io.Reader, cas CAS) error {
 	return nil
 }
 
-func serve(listen string, cas CAS) error {
+// serve implements a very simple HTTP read-only interface to a CAS.
+func serve(listen string, cas CASReader) error {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		h := r.URL.Path[1:]
 		if err := cas.Copy(w, h); err != nil {
