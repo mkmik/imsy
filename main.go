@@ -107,6 +107,20 @@ func pull(h string, outfile string, cas cas.Reader) error {
 	return nil
 }
 
+func pullCmd(cs cas.ReadWriter) error {
+	if flag.NArg() < 2 || *output == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
+	cr := &cas.ChainedReader{Readers: []cas.Reader{cs, &cas.HTTPReader{Addr: *casAddr}}}
+	err := pull(flag.Arg(1), *output, cas.CachingReader{R: cr, W: cs})
+	if err != nil {
+		return err
+	}
+	log.Printf("hits: %s\n", cr.PrettyHits())
+	return nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -128,14 +142,7 @@ func main() {
 	case "serve":
 		err = serve(*listen, cs)
 	case "pull":
-		if flag.NArg() < 2 || *output == "" {
-			flag.Usage()
-			os.Exit(1)
-		}
-		err = pull(flag.Arg(1), *output, cas.CachingReader{
-			R: cas.ChainedReader{cs, &cas.HTTPReader{Addr: *casAddr}},
-			W: cs,
-		})
+		err = pullCmd(cs)
 	default:
 		err = fmt.Errorf("unknown command %q", cmd)
 	}

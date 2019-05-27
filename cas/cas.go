@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 )
 
 type Writer interface {
@@ -84,16 +85,36 @@ func (c *HTTPReader) Copy(w io.Writer, h string) error {
 }
 
 // a ChainedReader reads from CAS readers until one doesn't return error
-type ChainedReader []Reader
+type ChainedReader struct {
+	Readers []Reader
+	Hits    []int
+}
 
-func (c ChainedReader) Copy(w io.Writer, h string) error {
+func (c *ChainedReader) Copy(w io.Writer, h string) error {
+	if l := len(c.Readers); len(c.Hits) != l {
+		c.Hits = make([]int, l)
+	}
 	var err error
-	for _, r := range c {
+	for i, r := range c.Readers {
 		if err = r.Copy(w, h); err == nil {
+			c.Hits[i]++
 			break
 		}
 	}
 	return err
+}
+
+func (c *ChainedReader) PrettyHits() string {
+	total := 0
+	for _, h := range c.Hits {
+		total += h
+	}
+
+	var buf strings.Builder
+	for _, h := range c.Hits {
+		fmt.Fprintf(&buf, "%.2f%% ", float64(h)/float64(total))
+	}
+	return buf.String()
 }
 
 // a caching Reader is a CAS that stores what it successfully reads.
