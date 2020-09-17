@@ -36,7 +36,7 @@ $ imsy -dir server1data serve
 On the second machine (it works also on the same machine via localhost):
 
 ```
-$ imsy -dir server2data pull 72d21dabc5a57782eaad5745f968a58cd3f029c00897a4da5688e795256dac50
+$ imsy -dir server2data -o vm1.img pull 72d21dabc5a57782eaad5745f968a58cd3f029c00897a4da5688e795256dac50
 ```
 
 Since `server2data` on the second machine is empty, this will basically just pull the whole image.
